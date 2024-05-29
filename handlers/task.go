@@ -1,127 +1,120 @@
 package handlers
 
 import (
+	"fmt"
 	"html/template"
 	"net/http"
 	"time"
 
 	"github.com/agustfricke/go-htmx-crud/database"
 	"github.com/agustfricke/go-htmx-crud/models"
+	"github.com/labstack/echo/v4"
 )
 
+func GetTasks(c echo.Context) error {
+	fmt.Println("tests")
+	db := database.DB
+	var tasks []models.Task
 
-func GetTasks(w http.ResponseWriter, r *http.Request) {
-    db := database.DB
-    var tasks []models.Task
+	if err := db.Find(&tasks).Error; err != nil {
+		return c.String(http.StatusInternalServerError, "Error getting tasks from database")
+	}
 
-    if err := db.Find(&tasks).Error; err != nil {
-        http.Error(w, "Error getting tasks from database", http.StatusInternalServerError)
-        return
-    }
+	tmpl, err := template.ParseFiles("templates/home.html")
+	if err != nil {
+		return c.String(http.StatusInternalServerError, "Render error")
+	}
 
-    tmpl := template.Must(template.ParseFiles("templates/home.html"))
-    if err := tmpl.Execute(w, tasks); err != nil {
-        http.Error(w, "Render error", http.StatusInternalServerError)
-        return
-    }
+	return c.Render(http.StatusOK, tmpl.Name(), tasks)
 }
 
-func CreateTask(w http.ResponseWriter, r *http.Request) {
-    time.Sleep(2 * time.Second)
+func CreateTask(c echo.Context) error {
+	time.Sleep(2 * time.Second)
 
-    name := r.PostFormValue("name")
+	name := c.FormValue("name")
+	if name == "" {
+		return c.String(http.StatusBadRequest, "Can't create task without a name")
+	}
 
-    if name == "" {
-        http.Error(w, "Can't create task without a name", http.StatusBadRequest)
-        return
-    }
+	db := database.DB
+	task := models.Task{Name: name}
 
-    db := database.DB
-    task := models.Task{Name: name}
+	if err := db.Create(&task).Error; err != nil {
+		return c.String(http.StatusInternalServerError, "Error creating task in database")
+	}
 
-    if err := db.Create(&task).Error; err != nil {
-        http.Error(w, "Error creating task in database", http.StatusInternalServerError)
-        return
-    }
+	tmpl, err := template.ParseFiles("templates/item.html")
+	if err != nil {
+		return c.String(http.StatusInternalServerError, "Render error")
+	}
 
-    tmpl := template.Must(template.ParseFiles("templates/item.html"))
-    if err := tmpl.Execute(w, task); err != nil {
-        http.Error(w, "Render error", http.StatusInternalServerError)
-        return
-    }
+	return c.Render(http.StatusOK, tmpl.Name(), task)
 }
 
-func DeleteTask(w http.ResponseWriter, r *http.Request) {
-    time.Sleep(2 * time.Second)
+func DeleteTask(c echo.Context) error {
+	time.Sleep(2 * time.Second)
 
-    ID := r.URL.Query().Get("ID")
+	ID := c.QueryParam("ID")
+	if ID == "" {
+		return c.String(http.StatusBadRequest, "ID not found")
+	}
 
-    if ID == "" {
-        http.Error(w, "ID not found", http.StatusBadRequest)
-        return
-    }
+	db := database.DB
+	var task models.Task
 
-    db := database.DB
-    var task models.Task
+	if err := db.First(&task, ID).Error; err != nil {
+		return c.String(http.StatusNotFound, "Task not found")
+	}
 
-    if err := db.First(&task, ID).Error; err != nil {
-            http.Error(w, "Task not found", http.StatusNotFound)
-            return
-    }
+	if err := db.Delete(&task).Error; err != nil {
+		return c.String(http.StatusInternalServerError, "Error deleting task from database")
+	}
 
-    if err := db.Delete(&task).Error; err != nil {
-        http.Error(w, "Error deleting task from database", http.StatusInternalServerError)
-        return
-    }
-
+	return c.NoContent(http.StatusOK)
 }
 
-func FormEditTask(w http.ResponseWriter, r *http.Request) {
-    name := r.URL.Query().Get("name")
-    ID := r.URL.Query().Get("ID")
+func FormEditTask(c echo.Context) error {
+	name := c.QueryParam("name")
+	ID := c.QueryParam("ID")
+	if ID == "" || name == "" {
+		return c.String(http.StatusBadRequest, "ID or Name not found")
+	}
 
-    if ID == "" || name == "" {
-        http.Error(w, "ID or Name not found", http.StatusBadRequest)
-        return
-    }
+	data := struct{ ID, Name string }{ID: ID, Name: name}
 
-    data := struct{ ID string; Name string }{ID: ID, Name: name}
+	tmpl, err := template.ParseFiles("templates/edit.html")
+	if err != nil {
+		return c.String(http.StatusInternalServerError, "Render error")
+	}
 
-    tmpl := template.Must(template.ParseFiles("templates/edit.html"))
-    if err := tmpl.Execute(w, data); err != nil {
-        http.Error(w, "Render error", http.StatusInternalServerError)
-        return
-    }
+	return c.Render(http.StatusOK, tmpl.Name(), data)
 }
-    
-func EditTask(w http.ResponseWriter, r *http.Request) {
-    time.Sleep(2 * time.Second)
 
-    name := r.PostFormValue("name")
-    ID := r.URL.Query().Get("ID")
+func EditTask(c echo.Context) error {
+	time.Sleep(2 * time.Second)
 
-    if ID == "" || name == "" {
-        http.Error(w, "ID or Name not found", http.StatusBadRequest)
-        return
-    }
+	name := c.FormValue("name")
+	ID := c.QueryParam("ID")
+	if ID == "" || name == "" {
+		return c.String(http.StatusBadRequest, "ID or Name not found")
+	}
 
-    db := database.DB
+	db := database.DB
+	var task models.Task
 
-    var task models.Task
-    if err := db.First(&task, ID).Error; err != nil {
-            http.Error(w, "Task not found", http.StatusNotFound)
-            return
-    }
+	if err := db.First(&task, ID).Error; err != nil {
+		return c.String(http.StatusNotFound, "Task not found")
+	}
 
-    task.Name = name
-    if err := db.Save(&task).Error; err != nil {
-        http.Error(w, "Error saving task in database", http.StatusInternalServerError)
-        return
-    }
+	task.Name = name
+	if err := db.Save(&task).Error; err != nil {
+		return c.String(http.StatusInternalServerError, "Error saving task in database")
+	}
 
-    tmpl := template.Must(template.ParseFiles("templates/item.html"))
-    if err := tmpl.Execute(w, task); err != nil {
-        http.Error(w, "Render error", http.StatusInternalServerError)
-        return
-    }
+	tmpl, err := template.ParseFiles("templates/item.html")
+	if err != nil {
+		return c.String(http.StatusInternalServerError, "Render error")
+	}
+
+	return c.Render(http.StatusOK, tmpl.Name(), task)
 }

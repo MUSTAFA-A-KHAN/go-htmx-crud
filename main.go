@@ -3,26 +3,29 @@ package main
 import (
 	"fmt"
 	"log"
-	"net/http"
 
 	"github.com/agustfricke/go-htmx-crud/database"
 	"github.com/agustfricke/go-htmx-crud/handlers"
+	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 )
 
-
 func main() {
+	database.ConnectDB()
 
-    database.ConnectDB()
+	e := echo.New()
 
-    fs := http.FileServer(http.Dir("public"))
-    http.Handle("/public/", http.StripPrefix("/public/", fs))
+	e.Use(middleware.Logger())
+	e.Use(middleware.Recover())
 
-	  http.HandleFunc("/add/", handlers.CreateTask)
-	  http.HandleFunc("/delete/", handlers.DeleteTask)
-	  http.HandleFunc("/edit/form/", handlers.FormEditTask)
-	  http.HandleFunc("/put", handlers.EditTask)
-    http.HandleFunc("/", handlers.GetTasks)
+	e.Static("/public", "public")
 
-	  fmt.Println("Runnning in port 8000")
-	  log.Fatal(http.ListenAndServe(":8000", nil))
+	e.GET("/", handlers.GetTasks)
+	e.POST("/add", handlers.CreateTask)
+	e.DELETE("/delete", handlers.DeleteTask)
+	e.GET("/edit/form", handlers.FormEditTask)
+	e.PUT("/put", handlers.EditTask)
+
+	fmt.Println("Running on port 8000")
+	log.Fatal(e.Start(":8000"))
 }
